@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { inspectWorkbookSheets } from "@/lib/excel-utils";
+import {
+  inspectWorkbookSheets,
+  validateExcelBufferAgainstMaster,
+} from "@/lib/excel-utils";
 import { getCountryConfig } from "@/lib/country-config";
 
 const STEP3_UPLOAD_DIR = path.resolve(process.cwd(), "app/step_3/upload");
+const MASTER_STEP3_EXCEL = path.resolve(
+  process.cwd(),
+  "app/step_3/lib/RXBE_Wizard_Step3_Sources_UI_Only.xlsx"
+);
 
 function sanitizeDirSegment(name: string): string {
   return name
@@ -65,6 +72,23 @@ export async function POST(request: NextRequest) {
     const stateDir = sanitizeDirSegment(province);
     const targetDir = path.join(STEP3_UPLOAD_DIR, countryDir, stateDir);
 
+    const arrayBuffer = await blob.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Validate uploaded workbook format against master template
+    const validation = validateExcelBufferAgainstMaster(buffer, MASTER_STEP3_EXCEL);
+    if (!validation.isValid) {
+      return NextResponse.json(
+        {
+          error: validation.error || "Excel sheet format does not match the master template.",
+          missingColumns: validation.missingColumns,
+          expectedColumns: validation.expectedColumns,
+          foundColumns: validation.foundColumns,
+        },
+        { status: 400 }
+      );
+    }
+
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
     }
@@ -78,8 +102,6 @@ export async function POST(request: NextRequest) {
     const safeName = `${baseClean || "step3_workbook"}_${Date.now()}${ext}`;
     const destinationPath = path.join(targetDir, safeName);
 
-    const arrayBuffer = await blob.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
     fs.writeFileSync(destinationPath, buffer);
 
     const metaPath = `${destinationPath}.meta.json`;

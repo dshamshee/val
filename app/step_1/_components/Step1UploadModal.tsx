@@ -25,6 +25,46 @@ export function Step1UploadModal({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [fileWarning, setFileWarning] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  function validateAndSetFile(file: File | null) {
+    setFileWarning(null);
+    setUploadError(null);
+
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+
+    const validExtensions = [".xlsx", ".xls"];
+    const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
+    const validMimes = [
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+      "application/msexcel",
+      "application/x-msexcel",
+      "application/x-ms-excel",
+      "application/x-excel",
+      "application/x-dos_ms_excel",
+      "application/xls",
+      "application/x-xls",
+    ];
+
+    const isExcel = validExtensions.includes(ext) || validMimes.includes(file.type);
+
+    if (!isExcel) {
+      setFileWarning(
+        `Invalid file format: "${file.name}". Only Excel files (.xlsx or .xls) are allowed. Please select a valid Excel file.`
+      );
+      setSelectedFile(null);
+      const inputEl = document.getElementById("step1-modal-file-input") as HTMLInputElement | null;
+      if (inputEl) inputEl.value = "";
+      return;
+    }
+
+    setSelectedFile(file);
+  }
 
   if (!isOpen) return null;
 
@@ -92,7 +132,12 @@ export function Step1UploadModal({
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `Upload failed with HTTP ${res.status}`);
+        const errMsg = errJson.error || `Upload failed with HTTP ${res.status}`;
+        setUploadError(errMsg);
+        setSelectedFile(null);
+        const inputEl = document.getElementById("step1-modal-file-input") as HTMLInputElement | null;
+        if (inputEl) inputEl.value = "";
+        return;
       }
 
       onUploadSuccess();
@@ -100,8 +145,13 @@ export function Step1UploadModal({
       setSelectedFile(null);
       setCustomCountryName("");
       setCustomProvinceName("");
+      setFileWarning(null);
+      setUploadError(null);
     } catch (err: unknown) {
       setUploadError(err instanceof Error ? err.message : "Upload failed.");
+      setSelectedFile(null);
+      const inputEl = document.getElementById("step1-modal-file-input") as HTMLInputElement | null;
+      if (inputEl) inputEl.value = "";
     } finally {
       setUploading(false);
     }
@@ -124,6 +174,7 @@ export function Step1UploadModal({
             onClick={() => {
               onClose();
               setUploadError(null);
+              setFileWarning(null);
             }}
             className="text-zinc-500 hover:text-zinc-300 text-lg leading-none p-1"
           >
@@ -132,9 +183,28 @@ export function Step1UploadModal({
         </div>
 
         <form onSubmit={handleUploadSubmit} className="space-y-4 text-xs">
+          {fileWarning && (
+            <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-900/50 text-amber-200 flex items-start gap-2.5 animate-in fade-in duration-150">
+              <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div className="space-y-1">
+                <p className="font-semibold text-amber-300">Invalid File Type</p>
+                <p className="text-[11px] text-amber-200/90 leading-relaxed">{fileWarning}</p>
+              </div>
+            </div>
+          )}
+
           {uploadError && (
-            <div className="p-3 rounded-lg bg-red-950/40 border border-red-900/50 text-red-300">
-              {uploadError}
+            <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-900/50 text-red-200 flex items-start gap-2.5 animate-in fade-in duration-150">
+              <svg className="w-4 h-4 text-red-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="space-y-1">
+                <p className="font-semibold text-red-300">Sheet Format Mismatch</p>
+                <p className="text-[11px] text-red-200/90 leading-relaxed whitespace-pre-line">{uploadError}</p>
+                <p className="text-[10px] text-red-400/80 pt-0.5">Please re-upload a correct Excel file matching the master template format.</p>
+              </div>
             </div>
           )}
 
@@ -199,32 +269,69 @@ export function Step1UploadModal({
           {/* File Picker */}
           <div className="space-y-1.5">
             <label className="block font-medium text-zinc-300">Excel File (.xlsx, .xls)</label>
-            <div className="border border-dashed border-zinc-800 rounded-xl p-4 text-center hover:border-zinc-700 bg-zinc-950/40 transition-colors">
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                const file = e.dataTransfer.files?.[0] || null;
+                validateAndSetFile(file);
+              }}
+              className={`border border-dashed rounded-xl p-4 text-center transition-all ${
+                isDragging
+                  ? "border-emerald-500/80 bg-emerald-950/20"
+                  : selectedFile
+                    ? "border-emerald-700/50 bg-emerald-950/10"
+                    : "border-zinc-800 hover:border-zinc-700 bg-zinc-950/40"
+              }`}
+            >
               <input
                 type="file"
                 id="step1-modal-file-input"
                 accept=".xlsx,.xls"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  validateAndSetFile(file);
+                }}
                 className="hidden"
               />
               <label
                 htmlFor="step1-modal-file-input"
                 className="cursor-pointer flex flex-col items-center gap-2"
               >
-                <svg className="w-7 h-7 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                <svg
+                  className={`w-7 h-7 transition-colors ${
+                    selectedFile ? "text-emerald-400" : isDragging ? "text-emerald-400" : "text-zinc-500"
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  />
                 </svg>
                 {selectedFile ? (
-                  <div>
-                    <p className="font-semibold text-zinc-200">{selectedFile.name}</p>
-                    <p className="text-[11px] text-zinc-500 font-mono">
-                      {(selectedFile.size / 1024).toFixed(1)} KB
+                  <div className="space-y-0.5">
+                    <p className="font-semibold text-emerald-300">{selectedFile.name}</p>
+                    <p className="text-[11px] text-zinc-400 font-mono">
+                      {(selectedFile.size / 1024).toFixed(1)} KB (Ready to upload)
+                    </p>
+                    <p className="text-[10px] text-zinc-500 underline pt-1 hover:text-zinc-300">
+                      Click or drop to choose a different file
                     </p>
                   </div>
                 ) : (
                   <div>
                     <p className="text-zinc-300 font-medium">Click to browse or drop Excel file</p>
-                    <p className="text-[11px] text-zinc-500">Supports .xlsx and .xls workbooks</p>
+                    <p className="text-[11px] text-zinc-500">Supports .xlsx and .xls workbooks only</p>
                   </div>
                 )}
               </label>
@@ -253,6 +360,7 @@ export function Step1UploadModal({
               onClick={() => {
                 onClose();
                 setUploadError(null);
+                setFileWarning(null);
               }}
               className="px-3.5 py-2 rounded-lg text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
             >
