@@ -45,6 +45,10 @@ export default function Step3Page() {
   }, [loadWorkbooks]);
 
   async function handleValidateSheet(workbook: WorkbookInfo, sheet: SheetMetadata) {
+    if (sheet.isValidMapping === false) {
+      setValidationError(sheet.mappingError || `Invalid Excel sheet or mapping not found in sheet "${sheet.name}".`);
+      return;
+    }
     const key = `${workbook.filePath}::${sheet.name}`;
     setValidatingKey(key);
     setValidationError(null);

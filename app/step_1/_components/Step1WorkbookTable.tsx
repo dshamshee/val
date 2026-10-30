@@ -284,8 +284,16 @@ export function Step1WorkbookTable({
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                               Active Sheet
                             </span>
+                          ) : sheet.isValidMapping === false ? (
+                            <span className="inline-flex items-center gap-1.5 text-amber-400 font-medium" title={sheet.mappingError || "Mapping not found"}>
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                              Mapping Missing
+                            </span>
                           ) : (
-                            <span className="text-zinc-500">Ready</span>
+                            <span className="inline-flex items-center gap-1.5 text-zinc-400">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80" />
+                              Ready
+                            </span>
                           )}
                         </td>
 

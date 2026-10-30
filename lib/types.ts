@@ -48,14 +48,20 @@ export interface XmlConfig {
   /** XML selector or tag query (e.g. "channel > item > title"). */
   readonly xml_path?: string;
 
-  /** Mode of extraction: item_count, latest_title, keyword_match, or custom_selector. */
-  readonly extraction_mode?: "item_count" | "latest_title" | "keyword_match" | "custom_selector";
+  /** Attribute name on matched element. */
+  readonly attribute?: string;
 
-  /** Optional keyword to check against title or description in feed items. */
-  readonly keyword?: string;
+  /** Regex applied to extracted XML content. */
+  readonly regex?: string;
 
-  /** Optional static value returned if match is found (e.g. "Active", "Yes"). */
+  /** Value if regex matches. */
   readonly value_if_found?: string | number;
+
+  /** Extraction mode for XML feeds */
+  readonly extraction_mode?: "item_count" | "latest_title" | "keyword";
+
+  /** Keyword to search for within items */
+  readonly keyword?: string;
 }
 
 export interface Indicator {
@@ -67,23 +73,20 @@ export interface Indicator {
   readonly ui_value: number | string;
   readonly unit: string;
   readonly tolerance: number;
-  /** Optional scraping configuration for HTML / PDF sources. */
+  /** Optional scraping configuration for HTML/PDF sources without JSON APIs. */
   readonly scrape_config?: ScrapeConfig | null;
-  /** Optional XML / RSS extraction configuration. */
+  /** Optional XML configuration for RSS/Atom sources. */
   readonly xml_config?: XmlConfig | null;
-  /** Explicit source type descriptor */
-  readonly source_type?: "API" | "PDF" | "SCRAPE" | "XML" | "CSV" | "INTERNAL" | "REACHABILITY";
-  /** Optional section metadata (e.g. Wizard Step 3 Screen Section) */
+  /** Optional Step 1/3 section metadata. */
   readonly screen_section?: string;
-  /** Optional contextual notes (e.g. "Where it shows") */
+  readonly source_type?: string;
   readonly where_it_shows?: string;
-  /** Optional flag indicating this is a reachability test */
   readonly is_reachability?: boolean;
 }
 
 export interface ValidationRequest {
   readonly request_id: string;
-  readonly timestamp: string;
+  readonly timestamp?: string;
   readonly project_metadata: ProjectMetadata;
   readonly indicators: Indicator[];
 }
@@ -135,6 +138,9 @@ export interface SheetMetadata {
   readonly columnCount: number;
   readonly columns: readonly string[];
   readonly hasIndicators: boolean;
+  readonly isValidMapping?: boolean;
+  readonly detectedSchema?: string;
+  readonly mappingError?: string;
 }
 
 export interface WorkbookInfo {

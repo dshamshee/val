@@ -2,11 +2,12 @@ import fs from "fs";
 import path from "path";
 import * as XLSX from "xlsx";
 import type { SheetMetadata } from "./types";
+import { validateWorksheetContent } from "./excel-schema-validator";
 
 /**
- * Inspects an Excel workbook file and returns metadata for all its sheets.
+ * Inspects an Excel workbook file and returns metadata and schema validity for all its sheets.
  */
-export function inspectWorkbookSheets(excelPath: string): SheetMetadata[] {
+export function inspectWorkbookSheets(excelPath: string, targetStep: 1 | 3 = 1): SheetMetadata[] {
   if (!fs.existsSync(excelPath)) {
     return [];
   }
@@ -17,16 +18,16 @@ export function inspectWorkbookSheets(excelPath: string): SheetMetadata[] {
       const sheet = wb.Sheets[name];
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
       const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
-      const hasIndicators =
-        columns.some((c) =>
-          /wizard field|data points|indicator|url|source|platform indicator/i.test(c)
-        ) || rows.length > 0;
+      const validation = validateWorksheetContent(rows, name, targetStep);
       return {
         name,
         rowCount: rows.length,
         columnCount: columns.length,
         columns,
-        hasIndicators,
+        hasIndicators: validation.isValid,
+        isValidMapping: validation.isValid,
+        detectedSchema: validation.detectedSchema,
+        mappingError: validation.errorMessage,
       };
     });
   } catch (error) {

@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { inspectWorkbookSheets } from "@/lib/excel-utils";
 import { getCountryConfig } from "@/lib/country-config";
+import { validateExcelWorkbook } from "@/lib/excel-schema-validator";
 
 const STEP1_UPLOAD_DIR = path.resolve(process.cwd(), "app/step_1/upload");
 
@@ -33,6 +34,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Invalid file format. Only .xlsx and .xls Excel files are supported." },
         { status: 400 }
+      );
+    }
+
+    const arrayBuffer = await blob.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // ── 1. Content Schema & Mapping Validator Check ────────────────────────
+    const schemaValidation = validateExcelWorkbook(buffer, originalName, 1);
+    if (!schemaValidation.isValid) {
+      return NextResponse.json(
+        {
+          error: "Invalid Excel sheet or mapping not found.",
+          message: schemaValidation.overallMessage,
+          details: schemaValidation.sheets[0]?.details || null,
+          sheets: schemaValidation.sheets,
+        },
+        { status: 422 }
       );
     }
 
@@ -78,8 +96,6 @@ export async function POST(request: NextRequest) {
     const safeName = `${baseClean || "step1_workbook"}_${Date.now()}${ext}`;
     const destinationPath = path.join(targetDir, safeName);
 
-    const arrayBuffer = await blob.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
     fs.writeFileSync(destinationPath, buffer);
 
     const metaPath = `${destinationPath}.meta.json`;
@@ -90,10 +106,12 @@ export async function POST(request: NextRequest) {
       displayName: originalName,
       fileName: safeName,
       uploadedAt: new Date().toISOString(),
+      detectedSchema: schemaValidation.sheets[0]?.detectedSchema || "STEP_1",
+      mappingScore: schemaValidation.sheets[0]?.confidence || 1.0,
     };
     fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
 
-    const sheets = inspectWorkbookSheets(destinationPath);
+    const sheets = inspectWorkbookSheets(destinationPath, 1);
 
     return NextResponse.json(
       {
@@ -107,6 +125,7 @@ export async function POST(request: NextRequest) {
         filePath: path.relative(process.cwd(), destinationPath),
         sheets,
         uploadedAt: metadata.uploadedAt,
+        validation: schemaValidation,
       },
       { status: 201 }
     );
@@ -148,31 +167,19 @@ export async function DELETE(request: NextRequest) {
 
       const metaPath = `${resolvedPath}.meta.json`;
       if (fs.existsSync(metaPath)) {
-        fs.unlinkSync(metaPath);
-      }
-
-      // Cleanup empty parent dirs
-      const parentDir = path.dirname(resolvedPath);
-      if (fs.existsSync(parentDir) && fs.readdirSync(parentDir).length === 0) {
-        fs.rmdirSync(parentDir);
-        const grandParentDir = path.dirname(parentDir);
-        if (
-          grandParentDir !== STEP1_UPLOAD_DIR &&
-          fs.existsSync(grandParentDir) &&
-          fs.readdirSync(grandParentDir).length === 0
-        ) {
-          fs.rmdirSync(grandParentDir);
+        try {
+          fs.unlinkSync(metaPath);
+        } catch {
+          // ignore
         }
       }
 
-      return NextResponse.json({
-        success: true,
-        message: `Deleted ${path.basename(resolvedPath)}`,
-      });
+      return NextResponse.json({ success: true, message: "File deleted successfully." });
+    } else {
+      return NextResponse.json({ error: "File not found." }, { status: 404 });
     }
-
-    return NextResponse.json({ error: "File not found." }, { status: 404 });
   } catch (error: unknown) {
+    console.error("Step 1 delete error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to delete file." },
       { status: 500 }

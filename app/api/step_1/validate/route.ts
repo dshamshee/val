@@ -4,6 +4,7 @@ import fs from "fs";
 import { parseStep1ExcelSources } from "@/app/step_1/lib/step1-excel-parser";
 import { processValidation } from "@/lib/validation-processor";
 import { getCountryConfig } from "@/lib/country-config";
+import { validateExcelWorkbook } from "@/lib/excel-schema-validator";
 
 interface ValidateSheetPayload {
   filePath?: string;
@@ -63,6 +64,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Pre-check Sheet Mapping & Schema ─────────────────────────────────
+    const schemaReport = validateExcelWorkbook(resolvedPath, path.basename(filePath), 1);
+    const targetSheetSchema = sheetName
+      ? schemaReport.sheets.find((s) => s.sheetName === sheetName)
+      : schemaReport.sheets[0];
+
+    if (targetSheetSchema && !targetSheetSchema.isValid) {
+      return NextResponse.json(
+        {
+          error: "Invalid Excel sheet or mapping not found.",
+          message: targetSheetSchema.errorMessage,
+          details: targetSheetSchema.details,
+          sheetName: targetSheetSchema.sheetName,
+          fileName: path.basename(filePath),
+        },
+        { status: 400 }
+      );
+    }
+
     let metaCountry: string | undefined;
     let metaCountryCode: string | undefined;
     let metaProvince: string | undefined;
@@ -103,7 +123,8 @@ export async function POST(request: NextRequest) {
     if (!indicators || indicators.length === 0) {
       return NextResponse.json(
         {
-          error: `No extractable indicators found in sheet "${sheetName || "Default"}" of ${path.basename(filePath)}.`,
+          error: "Invalid Excel sheet or mapping not found.",
+          message: `No extractable indicators found in sheet "${sheetName || "Default"}" of ${path.basename(filePath)}.`,
           sheetName,
           fileName: path.basename(filePath),
           country: countryCfg.country,
@@ -128,14 +149,9 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error: unknown) {
-    console.error("POST /api/step_1/validate error:", error);
+    console.error("Step 1 sheet validation route error:", error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to validate Step 1 sheet.",
-      },
+      { error: error instanceof Error ? error.message : "Internal sheet validation error." },
       { status: 500 }
     );
   }
