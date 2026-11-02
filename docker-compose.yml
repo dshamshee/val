@@ -1,0 +1,23 @@
+services:
+  val-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: val-app:latest
+    container_name: val-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    # Optional: Persist uploads across container recreations
+    # volumes:
+    #   - val-step1-uploads:/app/app/step_1/upload
+    #   - val-step3-uploads:/app/app/step_3/upload
+
+# volumes:
+#   val-step1-uploads:
+#   val-step3-uploads:
+
